@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Groove Garage — Scanner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/zxing.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #0f0f14;
+  --surface: #1a1a24;
+  --surface2:#22222f;
+  --border:  #2e2e3f;
+  --gold:    #c9952a;
+  --gold-bg: rgba(201,149,42,0.12);
+  --text:    #e8e8f0;
+  --dim:     #888899;
+  --green:   #3ac97a;
+  --red:     #c93a3a;
+  --radius:  12px;
+}
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overscroll-behavior: none;
+}
+
+/* ── SCREENS ── */
+.screen { display: none; flex-direction: column; height: 100vh; }
+.screen.active { display: flex; }
+
+/* ── HEADER ── */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.header-title {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--gold);
+}
+.header-sub {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.header-count {
+  font-size: 13px;
+  color: var(--dim);
+}
+.header-count span {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+/* ── SCAN SCREEN ── */
+.viewfinder-wrap {
+  flex: 1;
+  position: relative;
+  background: #000;
+  overflow: hidden;
+}
+#preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.scan-frame {
+  width: 72vw;
+  max-width: 280px;
+  height: 120px;
+  position: relative;
+}
+.scan-frame::before, .scan-frame::after,
+.scan-frame > span::before, .scan-frame > span::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: var(--gold);
+  border-style: solid;
+}
+.scan-frame::before    { top: 0;    left: 0;  border-width: 3px 0 0 3px; }
+.scan-frame::after     { top: 0;    right: 0; border-width: 3px 3px 0 0; }
+.scan-frame > span::before { bottom: 0; left: 0;  border-width: 0 0 3px 3px; }
+.scan-frame > span::after  { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
+.scan-line {
+  position: absolute;
+  left: 4px; right: 4px;
+  height: 2px;
+  background: linear-gradient(to right, transparent, var(--gold), transparent);
+  animation: scanline 1.8s ease-in-out infinite;
+  top: 0;
+}
+@keyframes scanline {
+  0%   { top: 8px;   opacity: 1; }
+  50%  { top: 108px; opacity: 1; }
+  100% { top: 8px;   opacity: 1; }
+}
+.scan-hint {
+  margin-top: 20px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 0.5px;
+  text-align: center;
+  padding: 0 16px;
+}
+.scan-success-flash {
+  position: absolute;
+  inset: 0;
+  background: rgba(58,201,122,0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.scan-success-flash.flash { opacity: 1; }
+
+.scan-bottom {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.btn-manual {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  padding: 12px;
+  cursor: pointer;
+  text-align: center;
+}
+.btn-history {
+  background: var(--gold-bg);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scanning-status {
+  position: absolute;
+  top: 12px;
+  left: 0; right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+}
+
+/* ── CONFIRM SCREEN ── */
+.confirm-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+.barcode-tag {
+  font-size: 11px;
+  color: var(--dim);
+  font-family: monospace;
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 3px 8px;
+  display: inline-block;
+  margin-bottom: 14px;
+}
+.lookup-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+}
+.lookup-badge.found    { background: rgba(58,201,122,0.15); color: var(--green); border: 1px solid rgba(58,201,122,0.3); }
+.lookup-badge.notfound { background: rgba(201,58,58,0.15);  color: var(--red);   border: 1px solid rgba(201,58,58,0.3); }
+.lookup-badge.manual   { background: var(--gold-bg);        color: var(--gold);  border: 1px solid var(--gold); }
+
+.field-group {
+  margin-bottom: 14px;
+}
+.field-label {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.field-input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 16px;
+  padding: 11px 14px;
+  -webkit-appearance: none;
+}
+.field-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+select.field-input option { background: var(--surface2); }
+
+.genre-auto {
+  font-size: 11px;
+  color: var(--green);
+  margin-top: 4px;
+}
+
+.confirm-footer {
+  flex-shrink: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  gap: 10px;
+}
+.btn-save {
+  flex: 1;
+  background: var(--gold);
+  border: none;
+  border-radius: var(--radius);
+  color: #1a1008;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 14px;
+  cursor: pointer;
+}
+.btn-save:active { opacity: 0.85; }
+.btn-cancel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--dim);
+  font-size: 14px;
+  padding: 14px 18px;
+  cursor: pointer;
+}
+.btn-save.saving {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* ── SAVED TOAST ── */
+.saved-toast {
+  position: fixed;
+  bottom: 90px;
+  left: 16px; right: 16px;
+  background: var(--surface);
+  border: 1px solid var(--green);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--green);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 100;
+  pointer-events: none;
+}
+.saved-toast.show { opacity: 1; transform: translateY(0); }
+
+/* ── HISTORY SCREEN ── */
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+.history-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.history-artist { font-weight: 700; font-size: 14px; }
+.history-title  { font-size: 13px; color: var(--dim); margin-top: 2px; }
+.history-meta   { font-size: 11px; color: var(--dim); margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+.history-qty    { color: var(--gold); font-weight: 600; }
+.history-new    { color: var(--green); }
+
+/* ── MANUAL ENTRY SCREEN ── */
+.manual-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* ── LOADING SPINNER ── */
+.spin {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.5s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── START SCREEN ── */
+.start-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+  gap: 16px;
+}
+.start-icon { font-size: 64px; }
+.start-title { font-family: Georgia, serif; font-size: 22px; color: var(--gold); }
+.start-sub   { font-size: 14px; color: var(--dim); line-height: 1.6; }
+.btn-start {
+  background: var(--gold);
+  border: none;
+  border-radius: var(--radius);
+  color: #1a1008;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 16px 40px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+</style>
+</head>
+<body>
+
+<!-- ══ SCAN SCREEN ══════════════════════════════════════════ -->
+<div id="screen-scan" class="screen active">
+  <div class="header">
+    <div>
+      <div class="header-title">Groove Garage</div>
+      <div class="header-sub">CD Scanner</div>
+    </div>
+    <div class="header-count">
+      Session: <span id="sessionCount">0</span>
+    </div>
+  </div>
+
+  <div class="viewfinder-wrap">
+    <video id="preview" autoplay playsinline muted></video>
+    <div class="scanning-status" id="scanStatus">Starting camera…</div>
+    <div class="scan-overlay">
+      <div class="scan-frame">
+        <span></span>
+        <div class="scan-line"></div>
+      </div>
+      <div class="scan-hint">Align barcode within the frame</div>
+    </div>
+    <div class="scan-success-flash" id="flashEl"></div>
+  </div>
+
+  <div class="scan-bottom">
+    <button class="btn-manual" onclick="showManual()">⌨ Enter Manually</button>
+    <button class="btn-history" onclick="showHistory()">
+      History (<span id="historyCountBtn">0</span>)
+    </button>
+  </div>
+</div>
+
+<!-- ══ CONFIRM SCREEN ═══════════════════════════════════════ -->
+<div id="screen-confirm" class="screen">
+  <div class="header">
+    <div>
+      <div class="header-title">Confirm & Save</div>
+      <div class="header-sub">Review details</div>
+    </div>
+    <button onclick="backToScan()" style="background:none;border:none;color:var(--dim);font-size:22px;padding:4px;">✕</button>
+  </div>
+
+  <div class="confirm-scroll">
+    <div id="barcodeTag" class="barcode-tag"></div>
+    <div id="lookupBadge" class="lookup-badge found">✓ Found on MusicBrainz</div>
+
+    <div class="field-group">
+      <div class="field-label">Artist *</div>
+      <input type="text" id="cfArtist" class="field-input" placeholder="Artist name"
+             oninput="triggerAutoGenre()">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Title *</div>
+      <input type="text" id="cfTitle" class="field-input" placeholder="Album title">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Label</div>
+      <input type="text" id="cfLabel" class="field-input" placeholder="Record label">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Year</div>
+      <input type="number" id="cfYear" class="field-input" placeholder="e.g. 1994">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Genre</div>
+      <select id="cfGenre" class="field-input">
+        <option value="">— detecting… —</option>
+        <option>Classic Rock</option>
+        <option>Hard Rock & Metal</option>
+        <option>Alternative & Modern Rock</option>
+        <option>Folk & Singer-Songwriter</option>
+        <option>Pop</option>
+        <option>Blues, Soul & R&B</option>
+        <option>Country & Americana</option>
+        <option>Soundtracks & Compilations</option>
+        <option>Musicals & Broadway</option>
+        <option>Comedy / Spoken Word</option>
+        <option>Needs Review</option>
+      </select>
+      <div class="genre-auto" id="genreAutoMsg"></div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Double CD?</div>
+      <select id="cfDouble" class="field-input">
+        <option value="No">No — single disc ($5)</option>
+        <option value="Yes">Yes — double disc ($8)</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Notes</div>
+      <input type="text" id="cfNotes" class="field-input" placeholder="Optional">
+    </div>
+  </div>
+
+  <div class="confirm-footer">
+    <button class="btn-cancel" onclick="backToScan()">Back</button>
+    <button class="btn-save" id="saveBtn" onclick="saveCD()">Save to Inventory</button>
+  </div>
+</div>
+
+<!-- ══ MANUAL ENTRY SCREEN ══════════════════════════════════ -->
+<div id="screen-manual" class="screen">
+  <div class="header">
+    <div>
+      <div class="header-title">Manual Entry</div>
+      <div class="header-sub">No barcode</div>
+    </div>
+    <button onclick="showScan()" style="background:none;border:none;color:var(--dim);font-size:22px;padding:4px;">✕</button>
+  </div>
+
+  <div class="manual-scroll">
+    <div class="field-group">
+      <div class="field-label">UPC Barcode (optional)</div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="manBarcode" class="field-input" placeholder="Type barcode to look up"
+               style="flex:1;" inputmode="numeric">
+        <button onclick="manualLookup()"
+          style="background:var(--gold);border:none;border-radius:8px;color:#1a1008;font-weight:700;padding:0 16px;font-size:14px;cursor:pointer;white-space:nowrap;">
+          Look Up
+        </button>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Artist *</div>
+      <input type="text" id="manArtist" class="field-input" placeholder="Artist name"
+             oninput="manAutoGenre()">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Title *</div>
+      <input type="text" id="manTitle" class="field-input" placeholder="Album title">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Label</div>
+      <input type="text" id="manLabel" class="field-input" placeholder="Record label">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Year</div>
+      <input type="number" id="manYear" class="field-input" placeholder="e.g. 1994" inputmode="numeric">
+    </div>
+    <div class="field-group">
+      <div class="field-label">Genre</div>
+      <select id="manGenre" class="field-input">
+        <option value="">— select —</option>
+        <option>Classic Rock</option>
+        <option>Hard Rock & Metal</option>
+        <option>Alternative & Modern Rock</option>
+        <option>Folk & Singer-Songwriter</option>
+        <option>Pop</option>
+        <option>Blues, Soul & R&B</option>
+        <option>Country & Americana</option>
+        <option>Soundtracks & Compilations</option>
+        <option>Musicals & Broadway</option>
+        <option>Comedy / Spoken Word</option>
+        <option>Needs Review</option>
+      </select>
+      <div class="genre-auto" id="manGenreAutoMsg"></div>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Double CD?</div>
+      <select id="manDouble" class="field-input">
+        <option value="No">No — single disc ($5)</option>
+        <option value="Yes">Yes — double disc ($8)</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <div class="field-label">Notes</div>
+      <input type="text" id="manNotes" class="field-input" placeholder="Optional">
+    </div>
+  </div>
+
+  <div class="confirm-footer">
+    <button class="btn-cancel" onclick="showScan()">Cancel</button>
+    <button class="btn-save" id="manSaveBtn" onclick="saveManual()">Save to Inventory</button>
+  </div>
+</div>
+
+<!-- ══ HISTORY SCREEN ═══════════════════════════════════════ -->
+<div id="screen-history" class="screen">
+  <div class="header">
+    <div>
+      <div class="header-title">Session History</div>
+      <div class="header-sub" id="historySubtitle">0 CDs added this session</div>
+    </div>
+    <button onclick="showScan()" style="background:none;border:none;color:var(--dim);font-size:22px;padding:4px;">✕</button>
+  </div>
+  <div class="history-list" id="historyList">
+    <div style="text-align:center;padding:40px;color:var(--dim);">No CDs scanned yet this session</div>
+  </div>
+</div>
+
+<!-- SAVED TOAST -->
+<div id="savedToast" class="saved-toast"></div>
+
+<script>
+// ── CONFIG ─────────────────────────────────────────────────
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwlV39-rraFAIklwGv3K0u3FZj28v2dAYMZN2FrRbHg6japGuzrS-xpXCfDE8Q3yxWN/exec';
+
+// ── STATE ──────────────────────────────────────────────────
+const S = {
+  sessionLog:    [],
+  sessionCount:  0,
+  currentBarcode:'',
+  scanner:       null,
+  scanning:      true,
+  genreTimer:    null,
+};
+
+// ── API ────────────────────────────────────────────────────
+async function api(action, data) {
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...data }),
+    });
+    return await res.json();
+  } catch(e) { return { error: e.toString() }; }
+}
+
+// ── SCREEN NAV ─────────────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+}
+function showScan()    { showScreen('scan');    resumeScanning(); }
+function showHistory() {
+  showScreen('history');
+  renderHistory();
+  pauseScanning();
+}
+function showManual()  { showScreen('manual');  pauseScanning(); }
+function backToScan()  { showScreen('scan');    resumeScanning(); }
+
+// ── CAMERA / ZXING ─────────────────────────────────────────
+async function startScanner() {
+  try {
+    const hints = new Map();
+    const formats = [
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.CODE_128,
+    ];
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+    S.scanner = new ZXing.BrowserMultiFormatReader(hints);
+
+    const devices = await ZXing.BrowserMultiFormatReader.listVideoInputDevices();
+    // Prefer rear camera
+    const rear = devices.find(d =>
+      d.label.toLowerCase().includes('back') ||
+      d.label.toLowerCase().includes('rear') ||
+      d.label.toLowerCase().includes('environment')
+    ) || devices[devices.length - 1];
+
+    document.getElementById('scanStatus').textContent = 'Ready — point at barcode';
+
+    await S.scanner.decodeFromVideoDevice(
+      rear ? rear.deviceId : undefined,
+      'preview',
+      (result, err) => {
+        if (result && S.scanning) onBarcodeDetected(result.getText());
+      }
+    );
+  } catch(e) {
+    document.getElementById('scanStatus').textContent = 'Camera unavailable — use manual entry';
+    console.error('Scanner error:', e);
+  }
+}
+
+function pauseScanning() { S.scanning = false; }
+function resumeScanning() { S.scanning = true; }
+
+async function onBarcodeDetected(barcode) {
+  if (!S.scanning) return;
+  S.scanning = false; // prevent double-fire
+
+  // Flash green
+  const flash = document.getElementById('flashEl');
+  flash.classList.add('flash');
+  setTimeout(() => flash.classList.remove('flash'), 300);
+
+  S.currentBarcode = barcode;
+  document.getElementById('scanStatus').textContent = 'Found: ' + barcode + ' — looking up…';
+
+  // Lookup MusicBrainz
+  await lookupAndShow(barcode, false);
+}
+
+// ── MUSICBRAINZ LOOKUP ─────────────────────────────────────
+async function lookupAndShow(barcode, isManual) {
+  showScreen('confirm');
+
+  document.getElementById('barcodeTag').textContent = 'Barcode: ' + barcode;
+  document.getElementById('cfArtist').value = '';
+  document.getElementById('cfTitle').value  = '';
+  document.getElementById('cfLabel').value  = '';
+  document.getElementById('cfYear').value   = '';
+  document.getElementById('cfGenre').value  = '';
+  document.getElementById('cfNotes').value  = '';
+  document.getElementById('cfDouble').value = 'No';
+  document.getElementById('genreAutoMsg').textContent = '';
+
+  const badge = document.getElementById('lookupBadge');
+  badge.className = 'lookup-badge found';
+  badge.textContent = '⏳ Looking up MusicBrainz…';
+
+  try {
+    const url = `https://musicbrainz.org/ws/2/release/?query=barcode:${barcode}&fmt=json&limit=1`;
+    const res  = await fetch(url, {
+      headers: { 'User-Agent': 'GrooveGarage/1.0 (groove@groovegarage.local)' }
+    });
+    const data = await res.json();
+
+    if (data.releases && data.releases.length > 0) {
+      const rel    = data.releases[0];
+      const artist = rel['artist-credit']?.[0]?.artist?.name || '';
+      const title  = rel.title || '';
+      const label  = rel['label-info']?.[0]?.label?.name || '';
+      const year   = rel.date ? rel.date.substring(0, 4) : '';
+      const catalog= rel['label-info']?.[0]?.['catalog-number'] || '';
+
+      document.getElementById('cfArtist').value = artist;
+      document.getElementById('cfTitle').value  = title;
+      document.getElementById('cfLabel').value  = label;
+      document.getElementById('cfYear').value   = year;
+
+      badge.className = 'lookup-badge found';
+      badge.textContent = '✓ Found on MusicBrainz';
+
+      if (artist) await autoGenreFor(artist, 'cfGenre', 'genreAutoMsg');
+    } else {
+      badge.className = 'lookup-badge notfound';
+      badge.textContent = '✗ Not found — fill in manually';
+      document.getElementById('cfArtist').focus();
+    }
+  } catch(e) {
+    badge.className = 'lookup-badge notfound';
+    badge.textContent = '✗ Lookup failed — fill in manually';
+  }
+}
+
+// ── AUTO GENRE ─────────────────────────────────────────────
+async function autoGenreFor(artist, selectId, msgId) {
+  const res = await api('lookupGenre', { artist });
+  if (res.genre) {
+    document.getElementById(selectId).value = res.genre;
+    document.getElementById(msgId).textContent =
+      res.genre !== 'Needs Review' ? '✓ Auto-detected' : '⚠ Not in genre rules — please select';
+  }
+}
+
+function triggerAutoGenre() {
+  clearTimeout(S.genreTimer);
+  S.genreTimer = setTimeout(() => {
+    const artist = document.getElementById('cfArtist').value.trim();
+    if (artist.length > 2) autoGenreFor(artist, 'cfGenre', 'genreAutoMsg');
+  }, 600);
+}
+
+async function manAutoGenre() {
+  clearTimeout(S.genreTimer);
+  S.genreTimer = setTimeout(async () => {
+    const artist = document.getElementById('manArtist').value.trim();
+    if (artist.length > 2) await autoGenreFor(artist, 'manGenre', 'manGenreAutoMsg');
+  }, 600);
+}
+
+// ── SAVE FROM CONFIRM SCREEN ───────────────────────────────
+async function saveCD() {
+  const artist = document.getElementById('cfArtist').value.trim();
+  const title  = document.getElementById('cfTitle').value.trim();
+  if (!artist || !title) {
+    alert('Artist and Title are required');
+    return;
+  }
+
+  const btn = document.getElementById('saveBtn');
+  btn.classList.add('saving');
+  btn.textContent = '⏳ Saving…';
+
+  const res = await api('addCD', { data: {
+    artist,
+    title,
+    label:    document.getElementById('cfLabel').value.trim(),
+    year:     document.getElementById('cfYear').value,
+    genre:    document.getElementById('cfGenre').value,
+    doubleCD: document.getElementById('cfDouble').value,
+    notes:    document.getElementById('cfNotes').value.trim(),
+    catalog:  '',
+    discogsId:'',
+  }});
+
+  btn.classList.remove('saving');
+  btn.textContent = 'Save to Inventory';
+
+  if (res.success) {
+    const msg = res.action === 'incremented'
+      ? `+1 copy · ${artist} · now ${res.newQty} in stock`
+      : `Saved · ${artist} — ${title}`;
+    showToast(msg);
+
+    S.sessionCount++;
+    S.sessionLog.unshift({
+      artist, title,
+      genre:    document.getElementById('cfGenre').value,
+      doubleCD: document.getElementById('cfDouble').value,
+      uid:      res.uid,
+      action:   res.action || 'new',
+      newQty:   res.newQty || 1,
+      time:     new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }),
+    });
+
+    updateCounters();
+    showScreen('scan');
+    resumeScanning();
+    document.getElementById('scanStatus').textContent = 'Ready — point at barcode';
+  } else {
+    alert('Save failed: ' + (res.error || 'unknown error'));
+  }
+}
+
+// ── SAVE FROM MANUAL SCREEN ────────────────────────────────
+async function saveManual() {
+  const artist = document.getElementById('manArtist').value.trim();
+  const title  = document.getElementById('manTitle').value.trim();
+  if (!artist || !title) { alert('Artist and Title are required'); return; }
+
+  const btn = document.getElementById('manSaveBtn');
+  btn.classList.add('saving');
+  btn.textContent = '⏳ Saving…';
+
+  const res = await api('addCD', { data: {
+    artist,
+    title,
+    label:    document.getElementById('manLabel').value.trim(),
+    year:     document.getElementById('manYear').value,
+    genre:    document.getElementById('manGenre').value,
+    doubleCD: document.getElementById('manDouble').value,
+    notes:    document.getElementById('manNotes').value.trim(),
+  }});
+
+  btn.classList.remove('saving');
+  btn.textContent = 'Save to Inventory';
+
+  if (res.success) {
+    const msg = res.action === 'incremented'
+      ? `+1 copy · ${artist} · now ${res.newQty} in stock`
+      : `Saved · ${artist} — ${title}`;
+    showToast(msg);
+
+    S.sessionCount++;
+    S.sessionLog.unshift({
+      artist, title,
+      genre:    document.getElementById('manGenre').value,
+      doubleCD: document.getElementById('manDouble').value,
+      uid:      res.uid,
+      action:   res.action || 'new',
+      newQty:   res.newQty || 1,
+      time:     new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }),
+    });
+
+    updateCounters();
+    clearManualForm();
+    showToast(msg);
+    showScreen('scan');
+    resumeScanning();
+  } else {
+    alert('Save failed: ' + (res.error || 'unknown error'));
+  }
+}
+
+// ── MANUAL LOOKUP ──────────────────────────────────────────
+async function manualLookup() {
+  const barcode = document.getElementById('manBarcode').value.trim();
+  if (!barcode) return;
+  await lookupAndShow(barcode, true);
+  // After confirm screen, going back will return to manual
+}
+
+// ── HELPERS ────────────────────────────────────────────────
+function clearManualForm() {
+  ['manBarcode','manArtist','manTitle','manLabel','manYear','manNotes'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('manGenre').value  = '';
+  document.getElementById('manDouble').value = 'No';
+  document.getElementById('manGenreAutoMsg').textContent = '';
+}
+
+function updateCounters() {
+  document.getElementById('sessionCount').textContent    = S.sessionCount;
+  document.getElementById('historyCountBtn').textContent = S.sessionCount;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('savedToast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function renderHistory() {
+  document.getElementById('historySubtitle').textContent =
+    S.sessionLog.length + ' CD' + (S.sessionLog.length !== 1 ? 's' : '') + ' added this session';
+
+  if (S.sessionLog.length === 0) {
+    document.getElementById('historyList').innerHTML =
+      '<div style="text-align:center;padding:40px;color:var(--dim);">No CDs scanned yet this session</div>';
+    return;
+  }
+
+  document.getElementById('historyList').innerHTML = S.sessionLog.map(item => `
+    <div class="history-item">
+      <div class="history-artist">${esc(item.artist)}</div>
+      <div class="history-title">${esc(item.title)}</div>
+      <div class="history-meta">
+        <span>${esc(item.genre || '—')}</span>
+        ${item.doubleCD === 'Yes' ? '<span style="color:var(--gold);">2xCD</span>' : ''}
+        <span class="${item.action === 'incremented' ? 'history-qty' : 'history-new'}">
+          ${item.action === 'incremented' ? `qty now ${item.newQty}` : 'new entry'}
+        </span>
+        <span style="margin-left:auto;">${item.time}</span>
+      </div>
+    </div>`).join('');
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── INIT ───────────────────────────────────────────────────
+startScanner();
+</script>
+</body>
+</html>
