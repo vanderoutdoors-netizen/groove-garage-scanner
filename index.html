@@ -410,19 +410,7 @@ async function saveCD() {
     document.getElementById('sessionCount').textContent = S.count;
     renderHistory();
     clearForm();
-    S.scanning = true;
-    document.getElementById('scanStatus').textContent = 'Scanning — align barcode…';
-    // Restart Quagga for next scan
-    if (window.Quagga) {
-      Quagga.start();
-      Quagga.onDetected((data) => {
-        if (!S.scanning) return;
-        const code = data.codeResult.code;
-        document.getElementById('dbgResult').textContent = 'Barcode: ' + code;
-        Quagga.stop();
-        onBarcode(code);
-      });
-    }
+    clearForm();
   } else {
     showToast('Save failed: ' + (res.error||'unknown'), true);
   }
@@ -446,10 +434,42 @@ function clearForm() {
   setStatus('Ready — align barcode in frame','');
   showForm(false);
   window.scrollTo(0,0);
-  // Restart Quagga if it was running
-  if (window.Quagga && S.scanning) {
-    Quagga.start();
+  // Always restart Quagga when clearing for next scan
+  S.scanning = true;
+  document.getElementById('scanStatus').textContent = 'Scanning — align barcode…';
+  if (window.Quagga) {
+    try { Quagga.stop(); } catch(e) {}
+    setTimeout(() => {
+      try {
+        Quagga.start();
+      } catch(e) {
+        // Quagga already running or needs full reinit
+        restartQuagga();
+      }
+    }, 300);
   }
+}
+
+function restartQuagga() {
+  const video = document.getElementById('preview');
+  if (!video || !video.srcObject) return;
+  Quagga.init({
+    inputStream: { type:'LiveStream', target:video,
+      constraints:{ facingMode:'environment' } },
+    decoder: { readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader'] },
+    locate: true,
+  }, (err) => {
+    if (!err) {
+      Quagga.start();
+      Quagga.onDetected((data) => {
+        if (!S.scanning) return;
+        const code = data.codeResult.code;
+        document.getElementById('dbgResult').textContent = 'Barcode: ' + code;
+        Quagga.stop();
+        onBarcode(code);
+      });
+    }
+  });
 }
 function showToast(msg, isError) {
   const t = document.getElementById('toast');
