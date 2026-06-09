@@ -373,7 +373,12 @@ select.field-input option { background: var(--surface2); }
 
   <div class="viewfinder-wrap">
     <video id="preview" autoplay playsinline muted></video>
-    <div class="scanning-status" id="scanStatus">Starting camera…</div>
+    <div class="scanning-status" id="scanStatus">Tap Start Camera to begin</div>
+    <div id="startCameraBtn" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);">
+      <button onclick="startScannerManual()" style="background:var(--gold);border:none;border-radius:12px;color:#1a1008;font-size:18px;font-weight:700;padding:18px 36px;cursor:pointer;">
+        📷 Start Camera
+      </button>
+    </div>
     <div class="scan-overlay">
       <div class="scan-frame">
         <span></span>
@@ -894,7 +899,13 @@ function esc(s) {
 }
 
 // ── INIT ───────────────────────────────────────────────────
-startScanner();
+async function startScannerManual() {
+  document.getElementById('startCameraBtn').style.display = 'none';
+  document.getElementById('scanStatus').textContent = 'Starting camera…';
+  await startScanner();
+}
+
+// Don't auto-start — wait for user tap to trigger permission prompt
 </script>
 </body>
 </html>
