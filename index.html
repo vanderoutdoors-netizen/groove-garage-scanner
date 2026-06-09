@@ -327,6 +327,7 @@ function startManualLoop(video) {
 function onBarcode(barcode) {
   if (!S.scanning) return;
   S.scanning = false;
+  if (window.Quagga) Quagga.stop();
   document.getElementById('flash').classList.add('show');
   setTimeout(() => document.getElementById('flash').classList.remove('show'), 300);
   document.getElementById('scanStatus').textContent = 'Read: ' + barcode;
@@ -411,6 +412,17 @@ async function saveCD() {
     clearForm();
     S.scanning = true;
     document.getElementById('scanStatus').textContent = 'Scanning — align barcode…';
+    // Restart Quagga for next scan
+    if (window.Quagga) {
+      Quagga.start();
+      Quagga.onDetected((data) => {
+        if (!S.scanning) return;
+        const code = data.codeResult.code;
+        document.getElementById('dbgResult').textContent = 'Barcode: ' + code;
+        Quagga.stop();
+        onBarcode(code);
+      });
+    }
   } else {
     showToast('Save failed: ' + (res.error||'unknown'), true);
   }
@@ -434,6 +446,10 @@ function clearForm() {
   setStatus('Ready — align barcode in frame','');
   showForm(false);
   window.scrollTo(0,0);
+  // Restart Quagga if it was running
+  if (window.Quagga && S.scanning) {
+    Quagga.start();
+  }
 }
 function showToast(msg, isError) {
   const t = document.getElementById('toast');
