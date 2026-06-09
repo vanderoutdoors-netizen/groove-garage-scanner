@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Groove Garage — Scanner</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/zxing.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -13,212 +12,131 @@
   --surface2:#22222f;
   --border:  #2e2e3f;
   --gold:    #c9952a;
-  --gold-bg: rgba(201,149,42,0.12);
   --text:    #e8e8f0;
   --dim:     #888899;
   --green:   #3ac97a;
   --red:     #c93a3a;
   --radius:  12px;
 }
-html, body {
-  min-height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
+html, body { min-height: 100%; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 
-.header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
+.header { background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
 .header-title { font-family: Georgia, serif; font-size: 18px; font-weight: bold; color: var(--gold); }
-.header-sub   { font-size: 11px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
+.header-sub { font-size: 11px; color: var(--dim); letter-spacing: 1px; text-transform: uppercase; }
 .header-count { font-size: 13px; color: var(--dim); }
 .header-count span { color: var(--gold); font-weight: 700; font-size: 18px; }
 
-.main { padding: 20px 16px; }
+.main { padding: 16px; }
 
-/* ── SCAN BUTTON ── */
-.scan-zone {
-  background: var(--surface);
-  border: 2px dashed var(--gold);
-  border-radius: var(--radius);
-  padding: 32px 20px;
-  text-align: center;
-  margin-bottom: 20px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
+/* viewfinder */
+.viewfinder-wrap {
+  position: relative; background: #000; border-radius: var(--radius);
+  overflow: hidden; margin-bottom: 16px; aspect-ratio: 4/3;
 }
-.scan-zone:active { opacity: 0.85; }
-.scan-icon { font-size: 56px; margin-bottom: 12px; }
-.scan-label { font-size: 20px; font-weight: 700; color: var(--gold); margin-bottom: 6px; }
-.scan-sub   { font-size: 13px; color: var(--dim); }
-#cameraInput { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+#preview { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-overlay {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; pointer-events: none;
+}
+.scan-frame { width: 70%; max-width: 260px; height: 100px; position: relative; }
+.scan-frame::before, .scan-frame::after,
+.scan-frame > span::before, .scan-frame > span::after {
+  content: ''; position: absolute; width: 22px; height: 22px;
+  border-color: var(--gold); border-style: solid;
+}
+.scan-frame::before    { top:0; left:0;  border-width: 3px 0 0 3px; }
+.scan-frame::after     { top:0; right:0; border-width: 3px 3px 0 0; }
+.scan-frame > span::before { bottom:0; left:0;  border-width: 0 0 3px 3px; }
+.scan-frame > span::after  { bottom:0; right:0; border-width: 0 3px 3px 0; }
+.scan-line {
+  position: absolute; left: 4px; right: 4px; height: 2px;
+  background: linear-gradient(to right, transparent, var(--gold), transparent);
+  animation: scanline 1.8s ease-in-out infinite; top: 0;
+}
+@keyframes scanline { 0%{top:6px;opacity:1} 50%{top:90px;opacity:1} 100%{top:6px;opacity:1} }
+.scan-hint { margin-top: 16px; font-size: 13px; color: rgba(255,255,255,0.7); text-align: center; }
+.scan-status { position: absolute; top: 10px; left: 0; right: 0;
+  text-align: center; font-size: 12px; color: rgba(255,255,255,0.6); }
+.flash { position: absolute; inset: 0; background: rgba(58,201,122,0.3);
+  opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.flash.show { opacity: 1; }
 
-/* ── OR DIVIDER ── */
-.or-divider {
-  display: flex; align-items: center; gap: 10px;
-  margin: 16px 0; color: var(--dim); font-size: 12px;
+/* start button overlay */
+.start-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center; border-radius: var(--radius);
 }
-.or-divider::before, .or-divider::after {
-  content: ''; flex: 1; height: 1px; background: var(--border);
+.btn-start-camera {
+  background: var(--gold); border: none; border-radius: var(--radius);
+  color: #1a1008; font-size: 17px; font-weight: 700; padding: 16px 32px; cursor: pointer;
 }
 
-/* ── MANUAL BARCODE ── */
-.manual-row {
-  display: flex; gap: 8px; margin-bottom: 20px;
-}
-.manual-row input {
-  flex: 1;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 16px;
-  padding: 12px 14px;
-  -webkit-appearance: none;
-}
+/* manual */
+.or-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0;
+  color: var(--dim); font-size: 12px; }
+.or-divider::before, .or-divider::after { content:''; flex:1; height:1px; background: var(--border); }
+.manual-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.manual-row input { flex:1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 16px; padding: 11px 13px; -webkit-appearance: none; }
 .manual-row input:focus { outline: none; border-color: var(--gold); }
-.btn-lookup {
-  background: var(--surface2);
-  border: 1px solid var(--gold);
-  border-radius: 8px;
-  color: var(--gold);
-  font-size: 14px;
-  font-weight: 700;
-  padding: 12px 16px;
-  cursor: pointer;
-  white-space: nowrap;
-}
+.btn-lookup { background: var(--surface2); border: 1px solid var(--gold); border-radius: 8px;
+  color: var(--gold); font-size: 14px; font-weight: 700; padding: 11px 14px; cursor: pointer; white-space: nowrap; }
 
-/* ── STATUS ── */
-.status-bar {
-  display: none;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: var(--dim);
-  margin-bottom: 16px;
-  text-align: center;
-}
+/* status */
+.status-bar { display:none; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--dim);
+  margin-bottom: 14px; text-align: center; }
 .status-bar.show { display: block; }
 .status-bar.found { border-color: var(--green); color: var(--green); }
 .status-bar.notfound { border-color: var(--red); color: var(--red); }
 
-/* ── FORM ── */
-.form-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  margin-bottom: 16px;
-  display: none;
-}
+/* form */
+.form-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 14px; display: none; }
 .form-card.show { display: block; }
-.form-card-title {
-  font-size: 11px; color: var(--dim);
-  letter-spacing: 1px; text-transform: uppercase;
-  margin-bottom: 14px;
-}
-.field { margin-bottom: 12px; }
-.field label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
-.field input, .field select {
-  width: 100%;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 16px;
-  padding: 10px 12px;
-  -webkit-appearance: none;
-}
+.form-title { font-size: 11px; color: var(--dim); letter-spacing: 1px;
+  text-transform: uppercase; margin-bottom: 12px; }
+.field { margin-bottom: 11px; }
+.field label { font-size: 11px; color: var(--dim); text-transform: uppercase;
+  letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
+.field input, .field select { width: 100%; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+  font-size: 16px; padding: 10px 12px; -webkit-appearance: none; }
 .field input:focus, .field select:focus { outline: none; border-color: var(--gold); }
 select option { background: var(--surface2); }
 .genre-auto { font-size: 11px; color: var(--green); margin-top: 3px; }
 
-.btn-save {
-  width: 100%;
-  background: var(--gold);
-  border: none;
-  border-radius: var(--radius);
-  color: #1a1008;
-  font-size: 17px;
-  font-weight: 700;
-  padding: 15px;
-  cursor: pointer;
-  margin-top: 4px;
-}
+.btn-save { width: 100%; background: var(--gold); border: none; border-radius: var(--radius);
+  color: #1a1008; font-size: 17px; font-weight: 700; padding: 14px; cursor: pointer; margin-top: 4px; }
 .btn-save:active { opacity: 0.85; }
 .btn-save.saving { opacity: 0.6; pointer-events: none; }
+.btn-clear { width: 100%; background: none; border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--dim); font-size: 14px;
+  padding: 11px; cursor: pointer; margin-top: 8px; }
 
-.btn-clear {
-  width: 100%;
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--dim);
-  font-size: 14px;
-  padding: 11px;
-  cursor: pointer;
-  margin-top: 8px;
-}
-
-/* ── TOAST ── */
-.toast {
-  position: fixed;
-  bottom: 24px; left: 16px; right: 16px;
-  background: var(--surface);
-  border: 1px solid var(--green);
-  border-radius: var(--radius);
-  padding: 12px 16px;
-  font-size: 14px;
-  color: var(--green);
-  text-align: center;
-  opacity: 0;
-  transform: translateY(8px);
-  transition: opacity 0.2s, transform 0.2s;
-  z-index: 100;
-  pointer-events: none;
-}
-.toast.show { opacity: 1; transform: translateY(0); }
-.toast.error { border-color: var(--red); color: var(--red); }
-
-/* ── HISTORY ── */
-.history-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  margin-bottom: 10px;
-}
+/* history */
+.section-title { font-size: 11px; color: var(--dim); letter-spacing: 1px;
+  text-transform: uppercase; margin: 16px 0 10px; }
+.history-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 11px 13px; margin-bottom: 8px; }
 .history-artist { font-weight: 700; font-size: 14px; }
 .history-title  { font-size: 13px; color: var(--dim); margin-top: 2px; }
 .history-meta   { font-size: 11px; color: var(--dim); margin-top: 5px; display: flex; gap: 10px; flex-wrap: wrap; }
-.history-new    { color: var(--green); }
-.history-qty    { color: var(--gold); }
 
-.section-title {
-  font-size: 11px; color: var(--dim);
-  letter-spacing: 1px; text-transform: uppercase;
-  margin: 20px 0 10px;
-}
+/* toast */
+.toast { position: fixed; bottom: 20px; left: 14px; right: 14px;
+  background: var(--surface); border: 1px solid var(--green); border-radius: var(--radius);
+  padding: 12px 16px; font-size: 14px; color: var(--green); text-align: center;
+  opacity: 0; transform: translateY(8px); transition: opacity 0.2s, transform 0.2s;
+  z-index: 100; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { border-color: var(--red); color: var(--red); }
 
-.spin {
-  display: inline-block; width: 14px; height: 14px;
-  border: 2px solid var(--border); border-top-color: var(--gold);
-  border-radius: 50%; animation: spin 0.5s linear infinite;
-  vertical-align: middle; margin-right: 6px;
-}
+.spin { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--border);
+  border-top-color: var(--gold); border-radius: 50%; animation: spin 0.5s linear infinite;
+  vertical-align: middle; margin-right: 5px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -234,81 +152,68 @@ select option { background: var(--surface2); }
 
 <div class="main">
 
-  <!-- TAP TO SCAN -->
-  <div class="scan-zone" onclick="document.getElementById('cameraInput').click()">
-    <div class="scan-icon">📷</div>
-    <div class="scan-label">Tap to Scan Barcode</div>
-    <div class="scan-sub">Select "Camera" — snap the CD barcode, then confirm</div>
-    <input type="file" id="cameraInput" accept="image/*"
-           onchange="handleImage(this)">
+  <!-- VIEWFINDER -->
+  <div class="viewfinder-wrap">
+    <video id="preview" autoplay playsinline muted></video>
+    <div class="scan-status" id="scanStatus">Tap Start Camera</div>
+    <div class="scan-overlay">
+      <div class="scan-frame"><span></span><div class="scan-line"></div></div>
+      <div class="scan-hint" id="scanHint">Align barcode within frame</div>
+    </div>
+    <div class="flash" id="flash"></div>
+    <div class="start-overlay" id="startOverlay">
+      <button class="btn-start-camera" onclick="startCamera()">📷 Start Camera</button>
+    </div>
   </div>
 
-  <!-- MANUAL ENTRY -->
+  <!-- MANUAL -->
   <div class="or-divider">or enter barcode manually</div>
   <div class="manual-row">
-    <input type="text" id="barcodeInput" placeholder="Type UPC number…" inputmode="numeric"
-           onkeydown="if(event.key==='Enter') lookupBarcode(document.getElementById('barcodeInput').value)">
-    <button class="btn-lookup" onclick="lookupBarcode(document.getElementById('barcodeInput').value)">Look Up</button>
+    <input type="text" id="barcodeInput" placeholder="Type UPC…" inputmode="numeric"
+           onkeydown="if(event.key==='Enter') doLookup(this.value)">
+    <button class="btn-lookup" onclick="doLookup(document.getElementById('barcodeInput').value)">Look Up</button>
   </div>
 
-  <!-- STATUS -->
   <div class="status-bar" id="statusBar"></div>
 
   <!-- FORM -->
   <div class="form-card" id="formCard">
-    <div class="form-card-title">Confirm & Save</div>
-    <div class="field">
-      <label>Artist *</label>
-      <input type="text" id="fArtist" placeholder="Artist name" oninput="triggerGenre()">
-    </div>
-    <div class="field">
-      <label>Title *</label>
-      <input type="text" id="fTitle" placeholder="Album title">
-    </div>
-    <div class="field">
-      <label>Label</label>
-      <input type="text" id="fLabel" placeholder="Record label">
-    </div>
-    <div class="field">
-      <label>Year</label>
-      <input type="number" id="fYear" placeholder="e.g. 1994" inputmode="numeric">
-    </div>
-    <div class="field">
-      <label>Genre</label>
+    <div class="form-title">Confirm &amp; Save</div>
+    <div class="field"><label>Artist *</label>
+      <input type="text" id="fArtist" placeholder="Artist" oninput="triggerGenre()"></div>
+    <div class="field"><label>Title *</label>
+      <input type="text" id="fTitle" placeholder="Album title"></div>
+    <div class="field"><label>Label</label>
+      <input type="text" id="fLabel" placeholder="Record label"></div>
+    <div class="field"><label>Year</label>
+      <input type="number" id="fYear" placeholder="e.g. 1994" inputmode="numeric"></div>
+    <div class="field"><label>Genre</label>
       <select id="fGenre">
         <option value="">— detecting… —</option>
-        <option>Classic Rock</option>
-        <option>Hard Rock & Metal</option>
-        <option>Alternative & Modern Rock</option>
-        <option>Folk & Singer-Songwriter</option>
-        <option>Pop</option>
-        <option>Blues, Soul & R&B</option>
-        <option>Country & Americana</option>
-        <option>Soundtracks & Compilations</option>
-        <option>Musicals & Broadway</option>
-        <option>Comedy / Spoken Word</option>
+        <option>Classic Rock</option><option>Hard Rock & Metal</option>
+        <option>Alternative & Modern Rock</option><option>Folk & Singer-Songwriter</option>
+        <option>Pop</option><option>Blues, Soul & R&B</option>
+        <option>Country & Americana</option><option>Soundtracks & Compilations</option>
+        <option>Musicals & Broadway</option><option>Comedy / Spoken Word</option>
         <option>Needs Review</option>
       </select>
       <div class="genre-auto" id="genreMsg"></div>
     </div>
-    <div class="field">
-      <label>Double CD?</label>
+    <div class="field"><label>Double CD?</label>
       <select id="fDouble">
         <option value="No">No — single disc ($5)</option>
         <option value="Yes">Yes — double disc ($8)</option>
       </select>
     </div>
-    <div class="field">
-      <label>Notes</label>
-      <input type="text" id="fNotes" placeholder="Optional">
-    </div>
+    <div class="field"><label>Notes</label>
+      <input type="text" id="fNotes" placeholder="Optional"></div>
     <button class="btn-save" id="saveBtn" onclick="saveCD()">Save to Inventory</button>
     <button class="btn-clear" onclick="clearForm()">Clear / Next CD</button>
   </div>
 
-  <!-- SESSION HISTORY -->
+  <!-- HISTORY -->
   <div id="historySection" style="display:none;">
-    <div class="section-title">This Session (<span id="historyCount">0</span> CDs)</div>
+    <div class="section-title">This session (<span id="historyCount">0</span> CDs)</div>
     <div id="historyList"></div>
   </div>
 
@@ -319,92 +224,113 @@ select option { background: var(--surface2); }
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwlV39-rraFAIklwGv3K0u3FZj28v2dAYMZN2FrRbHg6japGuzrS-xpXCfDE8Q3yxWN/exec';
 
-const S = { sessionLog: [], count: 0, genreTimer: null };
+const S = { log: [], count: 0, scanning: false, genreTimer: null, animFrame: null };
 
 async function api(action, data) {
   try {
-    const res = await fetch(SCRIPT_URL, { method:'POST', body: JSON.stringify({ action, ...data }) });
-    return await res.json();
+    const r = await fetch(SCRIPT_URL, { method:'POST', body: JSON.stringify({ action, ...data }) });
+    return await r.json();
   } catch(e) { return { error: e.toString() }; }
 }
 
-// ── IMAGE CAPTURE & DECODE ──────────────────────────────────
-async function handleImage(input) {
-  if (!input.files || !input.files[0]) return;
-  setStatus('Reading barcode…', '');
-  showForm(false);
-
-  const file = input.files[0];
-  const img  = new Image();
-  const url  = URL.createObjectURL(file);
-
-  img.onload = async () => {
-    try {
-      const canvas  = document.createElement('canvas');
-      canvas.width  = img.width;
-      canvas.height = img.height;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-
-      const hints = new Map();
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.EAN_13,
-        ZXing.BarcodeFormat.EAN_8,
-        ZXing.BarcodeFormat.UPC_A,
-        ZXing.BarcodeFormat.UPC_E,
-        ZXing.BarcodeFormat.CODE_128,
-      ]);
-      hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-
-      const reader = new ZXing.MultiFormatReader(hints);
-      const lum    = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-      const bmp    = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-      const result = reader.decode(bmp);
-
-      URL.revokeObjectURL(url);
-      await lookupBarcode(result.getText());
-    } catch(e) {
-      URL.revokeObjectURL(url);
-      setStatus('Could not read barcode — try again or enter manually', 'notfound');
-      showForm(true);
-    }
-    input.value = '';
-  };
-  img.src = url;
+// ── CAMERA ────────────────────────────────────────────────
+async function startCamera() {
+  document.getElementById('scanStatus').textContent = 'Requesting camera…';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    const video = document.getElementById('preview');
+    video.srcObject = stream;
+    await video.play();
+    document.getElementById('startOverlay').style.display = 'none';
+    document.getElementById('scanStatus').textContent = 'Scanning…';
+    S.scanning = true;
+    scanLoop();
+  } catch(e) {
+    document.getElementById('scanStatus').textContent = 'Camera denied — use manual entry below';
+    console.error('Camera error:', e);
+  }
 }
 
-// ── MUSICBRAINZ LOOKUP ──────────────────────────────────────
-async function lookupBarcode(barcode) {
-  barcode = (barcode || '').trim();
-  if (!barcode) return;
+// ── ZXING SCAN LOOP ────────────────────────────────────────
+async function scanLoop() {
+  // Load ZXing dynamically after camera starts
+  if (!window.ZXing) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/zxing-js/0.20.0/zxing.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
 
+  const hints = new Map();
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+    ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+    ZXing.BarcodeFormat.UPC_A,  ZXing.BarcodeFormat.UPC_E,
+    ZXing.BarcodeFormat.CODE_128,
+  ]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+
+  const reader  = new ZXing.MultiFormatReader(hints);
+  const canvas  = document.createElement('canvas');
+  const video   = document.getElementById('preview');
+
+  function tick() {
+    if (!S.scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      try {
+        const lum    = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const bmp    = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+        const result = reader.decode(bmp);
+        onBarcode(result.getText());
+        return;
+      } catch(e) { /* not found this frame */ }
+    }
+    S.animFrame = requestAnimationFrame(tick);
+  }
+  S.animFrame = requestAnimationFrame(tick);
+}
+
+function onBarcode(barcode) {
+  S.scanning = false;
+  cancelAnimationFrame(S.animFrame);
+  const fl = document.getElementById('flash');
+  fl.classList.add('show');
+  setTimeout(() => fl.classList.remove('show'), 300);
+  document.getElementById('scanStatus').textContent = 'Found: ' + barcode;
+  doLookup(barcode);
+}
+
+// ── LOOKUP ─────────────────────────────────────────────────
+async function doLookup(barcode) {
+  barcode = (barcode || '').trim().replace(/\D/g, '');
+  if (!barcode) return;
+  document.getElementById('barcodeInput').value = barcode;
   setStatus('<span class="spin"></span> Looking up ' + barcode + '…', '');
   showForm(false);
 
   try {
-    const url = `https://musicbrainz.org/ws/2/release/?query=barcode:${barcode}&fmt=json&limit=1`;
-    const res  = await fetch(url, { headers: { 'User-Agent': 'GrooveGarage/1.0 (groove@groovegarage.local)' }});
+    const res  = await fetch(
+      `https://musicbrainz.org/ws/2/release/?query=barcode:${barcode}&fmt=json&limit=1`,
+      { headers: { 'User-Agent': 'GrooveGarage/1.0 (groove@groovegarage.local)' }}
+    );
     const data = await res.json();
-
     if (data.releases && data.releases.length > 0) {
-      const rel    = data.releases[0];
+      const rel = data.releases[0];
+      document.getElementById('fArtist').value = rel['artist-credit']?.[0]?.artist?.name || '';
+      document.getElementById('fTitle').value  = rel.title || '';
+      document.getElementById('fLabel').value  = rel['label-info']?.[0]?.label?.name || '';
+      document.getElementById('fYear').value   = rel.date ? rel.date.substring(0,4) : '';
+      setStatus('✓ Found: ' + (rel['artist-credit']?.[0]?.artist?.name||'') + ' — ' + (rel.title||''), 'found');
       const artist = rel['artist-credit']?.[0]?.artist?.name || '';
-      const title  = rel.title || '';
-      const label  = rel['label-info']?.[0]?.label?.name || '';
-      const year   = rel.date ? rel.date.substring(0,4) : '';
-
-      document.getElementById('fArtist').value = artist;
-      document.getElementById('fTitle').value  = title;
-      document.getElementById('fLabel').value  = label;
-      document.getElementById('fYear').value   = year;
-
-      setStatus('✓ Found: ' + artist + ' — ' + title, 'found');
-      if (artist) await autoGenre(artist);
+      if (artist) autoGenre(artist);
     } else {
-      setStatus('Not found on MusicBrainz — fill in details below', 'notfound');
-      document.getElementById('fArtist').value = '';
-      document.getElementById('fTitle').value  = '';
-      document.getElementById('fLabel').value  = '';
-      document.getElementById('fYear').value   = '';
+      setStatus('Not found — fill in details below', 'notfound');
     }
   } catch(e) {
     setStatus('Lookup failed — fill in manually', 'notfound');
@@ -412,7 +338,6 @@ async function lookupBarcode(barcode) {
   showForm(true);
 }
 
-// ── GENRE AUTO-DETECT ───────────────────────────────────────
 async function autoGenre(artist) {
   const res = await api('lookupGenre', { artist });
   if (res.genre) {
@@ -430,19 +355,17 @@ function triggerGenre() {
   }, 700);
 }
 
-// ── SAVE ────────────────────────────────────────────────────
+// ── SAVE ──────────────────────────────────────────────────
 async function saveCD() {
   const artist = document.getElementById('fArtist').value.trim();
   const title  = document.getElementById('fTitle').value.trim();
   if (!artist || !title) { showToast('Artist and Title required', true); return; }
 
   const btn = document.getElementById('saveBtn');
-  btn.classList.add('saving');
-  btn.textContent = '⏳ Saving…';
+  btn.classList.add('saving'); btn.textContent = '⏳ Saving…';
 
   const res = await api('addCD', { data: {
-    artist,
-    title,
+    artist, title,
     label:    document.getElementById('fLabel').value.trim(),
     year:     document.getElementById('fYear').value,
     genre:    document.getElementById('fGenre').value,
@@ -450,89 +373,79 @@ async function saveCD() {
     notes:    document.getElementById('fNotes').value.trim(),
   }});
 
-  btn.classList.remove('saving');
-  btn.textContent = 'Save to Inventory';
+  btn.classList.remove('saving'); btn.textContent = 'Save to Inventory';
 
   if (res.success) {
     const msg = res.action === 'incremented'
       ? `+1 copy · ${artist} · now ${res.newQty} in stock`
       : `Saved · ${artist} — ${title}`;
     showToast(msg);
-
     S.count++;
-    S.sessionLog.unshift({
-      artist, title,
-      genre:   document.getElementById('fGenre').value,
-      double:  document.getElementById('fDouble').value,
-      action:  res.action || 'new',
-      newQty:  res.newQty || 1,
-      time:    new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }),
+    S.log.unshift({ artist, title,
+      genre: document.getElementById('fGenre').value,
+      double: document.getElementById('fDouble').value,
+      action: res.action||'new', newQty: res.newQty||1,
+      time: new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
     });
-
     document.getElementById('sessionCount').textContent = S.count;
     renderHistory();
     clearForm();
+    // Resume scanning
+    S.scanning = true;
+    document.getElementById('scanStatus').textContent = 'Scanning…';
+    scanLoop();
   } else {
-    showToast('Save failed: ' + (res.error || 'unknown'), true);
+    showToast('Save failed: ' + (res.error||'unknown'), true);
   }
 }
 
-// ── HELPERS ─────────────────────────────────────────────────
+// ── HELPERS ────────────────────────────────────────────────
 function setStatus(msg, type) {
   const el = document.getElementById('statusBar');
   el.innerHTML = msg;
-  el.className = 'status-bar show' + (type ? ' ' + type : '');
+  el.className = 'status-bar show' + (type ? ' '+type : '');
 }
-
 function showForm(show) {
   document.getElementById('formCard').className = 'form-card' + (show ? ' show' : '');
 }
-
 function clearForm() {
   ['fArtist','fTitle','fLabel','fYear','fNotes','barcodeInput'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
+    const el = document.getElementById(id); if(el) el.value='';
   });
-  document.getElementById('fGenre').value  = '';
-  document.getElementById('fDouble').value = 'No';
-  document.getElementById('genreMsg').textContent = '';
-  setStatus('Ready — tap to scan or enter barcode', '');
+  document.getElementById('fGenre').value='';
+  document.getElementById('fDouble').value='No';
+  document.getElementById('genreMsg').textContent='';
+  setStatus('Ready — align barcode in frame', '');
   showForm(false);
-  window.scrollTo(0, 0);
+  window.scrollTo(0,0);
 }
-
 function showToast(msg, isError) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'toast show' + (isError ? ' error' : '');
-  setTimeout(() => t.classList.remove('show'), 2800);
+  t.className = 'toast show' + (isError?' error':'');
+  setTimeout(()=>t.classList.remove('show'), 2800);
 }
-
 function renderHistory() {
   const sec = document.getElementById('historySection');
-  sec.style.display = S.sessionLog.length ? 'block' : 'none';
+  sec.style.display = S.log.length ? 'block' : 'none';
   document.getElementById('historyCount').textContent = S.count;
-  document.getElementById('historyList').innerHTML = S.sessionLog.map(item => `
+  document.getElementById('historyList').innerHTML = S.log.map(item=>`
     <div class="history-card">
       <div class="history-artist">${esc(item.artist)}</div>
       <div class="history-title">${esc(item.title)}</div>
       <div class="history-meta">
         <span>${esc(item.genre||'—')}</span>
         ${item.double==='Yes'?'<span style="color:var(--gold);">2xCD</span>':''}
-        <span class="${item.action==='incremented'?'history-qty':'history-new'}">
+        <span style="color:${item.action==='incremented'?'var(--gold)':'var(--green)'}">
           ${item.action==='incremented'?'qty now '+item.newQty:'new entry'}
         </span>
         <span style="margin-left:auto;">${item.time}</span>
       </div>
     </div>`).join('');
 }
-
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-
-// Init
-setStatus('Ready — tap to scan or enter barcode manually', '');
 </script>
 </body>
 </html>
