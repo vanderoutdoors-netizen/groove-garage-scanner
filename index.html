@@ -123,9 +123,9 @@ select option { background:var(--surface2); }
     </div>
   </div>
 
-  <div class="or-divider">or enter barcode manually</div>
+  <div class="or-divider">or enter barcode / catalog number</div>
   <div class="manual-row">
-    <input type="text" id="barcodeInput" placeholder="Type UPC…" inputmode="numeric"
+    <input type="text" id="barcodeInput" placeholder="Barcode or catalog #…"
            onkeydown="if(event.key==='Enter') doLookup(this.value)">
     <button class="btn-lookup" onclick="doLookup(document.getElementById('barcodeInput').value)">Look Up</button>
   </div>
@@ -335,41 +335,96 @@ function onBarcode(barcode) {
 }
 
 // ── LOOKUP ─────────────────────────────────────────────────
-async function doLookup(barcode) {
-  barcode = (barcode||'').trim().replace(/\D/g,'');
-  if (!barcode) return;
-  document.getElementById('barcodeInput').value = barcode;
-  setStatus('<span class="spin"></span> Looking up ' + barcode + '…', '');
+async function doLookup(input) {
+  input = (input||'').trim();
+  if (!input) return;
+  document.getElementById('barcodeInput').value = input;
+
+  // Determine if barcode (all digits) or catalog number (has letters)
+  const isBarcode = /^\d+$/.test(input);
+  setStatus('<span class="spin"></span> Looking up ' + input + '…', '');
   showForm(false);
+
+  let found = false;
+
+  // 1. Try MusicBrainz by barcode or catalog number
   try {
+    const query = isBarcode ? `barcode:${input}` : `catno:"${input}"`;
     const res = await fetch(
-      `https://musicbrainz.org/ws/2/release/?query=barcode:${barcode}&fmt=json&limit=1`,
+      `https://musicbrainz.org/ws/2/release/?query=${encodeURIComponent(query)}&fmt=json&limit=1`,
       { headers:{ 'User-Agent':'GrooveGarage/1.0 (groove@groovegarage.local)' }}
     );
     const data = await res.json();
     if (data.releases && data.releases.length > 0) {
       const rel    = data.releases[0];
       const artist = rel['artist-credit']?.[0]?.artist?.name || '';
-      document.getElementById('fArtist').value = artist;
-      document.getElementById('fTitle').value  = rel.title || '';
-      document.getElementById('fLabel').value  = rel['label-info']?.[0]?.label?.name || '';
-      document.getElementById('fYear').value   = rel.date ? rel.date.substring(0,4) : '';
-      setStatus('✓ Found: ' + artist + ' — ' + (rel.title||''), 'found');
-      if (artist) autoGenre(artist);
-    } else {
-      setStatus('Not found — fill in details below', 'notfound');
+      const title  = rel.title || '';
+      if (artist && title) {
+        document.getElementById('fArtist').value = artist;
+        document.getElementById('fTitle').value  = title;
+        document.getElementById('fLabel').value  = rel['label-info']?.[0]?.label?.name || '';
+        document.getElementById('fYear').value   = rel.date ? rel.date.substring(0,4) : '';
+        setStatus('✓ MusicBrainz: ' + artist + ' — ' + title, 'found');
+        if (artist) await autoGenre(artist);
+        found = true;
+      }
     }
-  } catch(e) { setStatus('Lookup failed — fill in manually', 'notfound'); }
+  } catch(e) { console.warn('MusicBrainz error:', e); }
+
+  // 2. If not found and it was a barcode, try Discogs
+  if (!found && isBarcode) {
+    try {
+      setStatus('<span class="spin"></span> Trying Discogs…', '');
+      const res = await fetch(
+        `https://api.discogs.com/database/search?barcode=${input}&type=release&per_page=1`,
+        { headers:{ 'User-Agent':'GrooveGarage/1.0', 'Authorization':'Discogs key=pYwCRmkbzFGKsLdXhGKO, secret=mVAjKCTHzIwBuAafFZzFhijkJCKJrxIF' }}
+      );
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        const r = data.results[0];
+        // Discogs title format is "Artist - Album (Year)"
+        const parts = (r.title||'').split(' - ');
+        const artist = parts[0] || '';
+        const title  = parts.slice(1).join(' - ').replace(/\s*\(\d{4}\).*$/, '') || '';
+        const year   = r.year ? String(r.year) : '';
+        const label  = r.label ? r.label[0] : '';
+        if (artist && title) {
+          document.getElementById('fArtist').value = artist;
+          document.getElementById('fTitle').value  = title;
+          document.getElementById('fLabel').value  = label;
+          document.getElementById('fYear').value   = year;
+          setStatus('✓ Discogs: ' + artist + ' — ' + title, 'found');
+          if (artist) await autoGenre(artist);
+          found = true;
+        }
+      }
+    } catch(e) { console.warn('Discogs error:', e); }
+  }
+
+  if (!found) {
+    setStatus('Not found — fill in details below', 'notfound');
+  }
   showForm(true);
 }
 
 async function autoGenre(artist) {
-  const res = await api('lookupGenre', { artist });
-  if (res.genre) {
-    document.getElementById('fGenre').value = res.genre;
-    document.getElementById('genreMsg').textContent =
-      res.genre !== 'Needs Review' ? '✓ Auto-detected' : '⚠ Please select genre';
+  if (!artist) return;
+  // Try exact match first, then strip common prefixes like "The "
+  const attempts = [artist];
+  if (artist.startsWith('The ')) attempts.push(artist.slice(4));
+  if (!artist.startsWith('The ')) attempts.push('The ' + artist);
+
+  for (const a of attempts) {
+    const res = await api('lookupGenre', { artist: a });
+    if (res.genre && res.genre !== 'Needs Review') {
+      document.getElementById('fGenre').value = res.genre;
+      document.getElementById('genreMsg').textContent = '✓ Auto-detected';
+      return;
+    }
   }
+  // If still needs review, set it but prompt user
+  document.getElementById('fGenre').value = 'Needs Review';
+  document.getElementById('genreMsg').textContent = '⚠ Please select genre';
 }
 
 function triggerGenre() {
