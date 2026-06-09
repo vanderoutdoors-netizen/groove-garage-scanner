@@ -238,8 +238,8 @@ select option { background: var(--surface2); }
   <div class="scan-zone" onclick="document.getElementById('cameraInput').click()">
     <div class="scan-icon">📷</div>
     <div class="scan-label">Tap to Scan Barcode</div>
-    <div class="scan-sub">Opens your camera — point at the CD barcode</div>
-    <input type="file" id="cameraInput" accept="image/*" capture="environment"
+    <div class="scan-sub">Select "Camera" — snap the CD barcode, then confirm</div>
+    <input type="file" id="cameraInput" accept="image/*"
            onchange="handleImage(this)">
   </div>
 
