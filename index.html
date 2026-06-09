@@ -139,7 +139,7 @@ select option { background: var(--surface2); }
   vertical-align: middle; margin-right: 5px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
-<script src="https://unpkg.com/@zxing/library@0.18.6/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.18.6/umd/index.min.js"></script>
 </head>
 <body>
 
@@ -267,34 +267,50 @@ async function startCamera() {
   }
 }
 
+// ── DEBUG ──────────────────────────────────────────────────
+function toggleDebug() {
+  const p = document.getElementById('debugPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+
 // ── ZXING SCAN LOOP ────────────────────────────────────────
 async function scanLoop() {
-  // ZXing loaded in head — just verify it's available
-  if (!window.ZXing) {
-    document.getElementById('scanStatus').textContent = 'ZXing not loaded — refresh page';
+  // @zxing/library uses ZXingBrowser namespace
+  const ZXLib = window.ZXingBrowser || window.ZXing;
+  if (!ZXLib) {
+    document.getElementById('scanStatus').textContent = 'Scanner library not loaded — refresh';
+    console.error('ZXing not found. Available globals:', Object.keys(window).filter(k=>k.includes('ZX')));
     return;
   }
 
-  const hints = new Map();
-  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-    ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
-    ZXing.BarcodeFormat.UPC_A,  ZXing.BarcodeFormat.UPC_E,
-    ZXing.BarcodeFormat.CODE_128,
-  ]);
-  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  // Use BrowserMultiFormatReader for @zxing/library
+  const codeReader = new ZXLib.BrowserMultiFormatReader();
+  const video = document.getElementById('preview');
 
-  const reader  = new ZXing.MultiFormatReader(hints);
-  const canvas  = document.createElement('canvas');
-  const video   = document.getElementById('preview');
+  // Use the built-in decode from video stream
+  try {
+    codeReader.decodeFromVideoElement(video, (result, err) => {
+      if (result && S.scanning) {
+        onBarcode(result.getText());
+      }
+      if (err && !(err instanceof ZXLib.NotFoundException)) {
+        console.warn('Decode error:', err);
+      }
+    });
+    document.getElementById('scanStatus').textContent = 'Scanning — align barcode in frame';
+  } catch(e) {
+    document.getElementById('scanStatus').textContent = 'Scanner error: ' + e.message;
+  }
+
+  // Simple canvas for debug
+  const canvas = document.createElement('canvas');
+  const attemptCount_unused = 0; // kept for compat
 
   let lastAttempt = 0;
   let attemptCount = 0;
 
-  function toggleDebug() {
-    const p = document.getElementById('debugPanel');
-    p.style.display = p.style.display === 'none' ? 'block' : 'none';
-  }
-
+  // tick is replaced by BrowserMultiFormatReader's internal loop above
+  // keeping stub for resumeScanning compatibility
   function tick(timestamp) {
     if (!S.scanning) return;
     if (timestamp - lastAttempt < 300) {
@@ -453,8 +469,7 @@ async function saveCD() {
     clearForm();
     // Resume scanning
     S.scanning = true;
-    document.getElementById('scanStatus').textContent = 'Scanning…';
-    scanLoop();
+    document.getElementById('scanStatus').textContent = 'Scanning — align barcode in frame';
   } else {
     showToast('Save failed: ' + (res.error||'unknown'), true);
   }
