@@ -132,20 +132,28 @@ select option { background:var(--surface2); }
 
   <div class="status-bar" id="statusBar"></div>
 
-  <div class="form-card" id="formCard">
-    <div class="form-title">Confirm &amp; Save</div>
-    <div class="field"><label>Artist *</label>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="fArtist" placeholder="Artist" oninput="triggerGenre()" list="artistList" style="flex:1;">
-        <button onclick="voiceInput()" id="voiceBtn"
-          style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
-                 color:var(--gold);font-size:18px;padding:0 12px;cursor:pointer;white-space:nowrap;"
-          title="Speak artist and title">🎤</button>
-      </div>
-      <datalist id="artistList"></datalist>
+  <!-- QUICK ENTRY — always visible -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
+    <div style="font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">
+      Quick Entry <span style="color:var(--gold);font-size:10px;margin-left:6px;">— tap 🎤 to speak artist &amp; title</span>
     </div>
-    <div class="field"><label>Title *</label>
-      <input type="text" id="fTitle" placeholder="Album title"></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="text" id="fArtist" placeholder="Artist *" oninput="triggerGenre()" list="artistList"
+             style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+                    color:var(--text);font-size:16px;padding:10px 12px;-webkit-appearance:none;">
+      <button onclick="voiceInput()" id="voiceBtn"
+        style="background:var(--surface2);border:1px solid var(--gold);border-radius:8px;
+               color:var(--gold);font-size:20px;padding:0 14px;cursor:pointer;flex-shrink:0;"
+        title="Speak artist and title">🎤</button>
+    </div>
+    <input type="text" id="fTitle" placeholder="Title *"
+           style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+                  color:var(--text);font-size:16px;padding:10px 12px;-webkit-appearance:none;">
+    <datalist id="artistList"></datalist>
+  </div>
+
+  <div class="form-card" id="formCard">
+    <div class="form-title">Additional Details</div>
     <div class="field"><label>Label</label>
       <input type="text" id="fLabel" placeholder="Record label"></div>
     <div class="field"><label>Year</label>
