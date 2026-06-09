@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Groove Garage — Scanner</title>
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.18.6/umd/index.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -13,16 +12,13 @@
 }
 html,body { min-height:100%; background:var(--bg); color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
-
 .header { background:var(--surface); border-bottom:1px solid var(--border);
   padding:14px 16px; display:flex; align-items:center; justify-content:space-between; }
 .header-title { font-family:Georgia,serif; font-size:18px; font-weight:bold; color:var(--gold); }
 .header-sub { font-size:11px; color:var(--dim); letter-spacing:1px; text-transform:uppercase; }
 .header-count { font-size:13px; color:var(--dim); }
 .header-count span { color:var(--gold); font-weight:700; font-size:18px; }
-
 .main { padding:16px; }
-
 .viewfinder-wrap { position:relative; background:#000; border-radius:var(--radius);
   overflow:hidden; margin-bottom:14px; aspect-ratio:4/3; }
 #preview { width:100%; height:100%; object-fit:cover; display:block; }
@@ -40,7 +36,8 @@ html,body { min-height:100%; background:var(--bg); color:var(--text);
   animation:scanline 1.8s ease-in-out infinite; }
 @keyframes scanline { 0%{top:6px} 50%{top:90px} 100%{top:6px} }
 .scan-status { position:absolute; top:10px; left:0; right:0;
-  text-align:center; font-size:12px; color:rgba(255,255,255,0.7); }
+  text-align:center; font-size:12px; color:rgba(255,255,255,0.8);
+  background:rgba(0,0,0,0.4); padding:3px 0; }
 .flash { position:absolute; inset:0; background:rgba(58,201,122,0.3);
   opacity:0; pointer-events:none; transition:opacity 0.15s; }
 .flash.show { opacity:1; }
@@ -48,25 +45,21 @@ html,body { min-height:100%; background:var(--bg); color:var(--text);
   display:flex; align-items:center; justify-content:center; border-radius:var(--radius); }
 .btn-start { background:var(--gold); border:none; border-radius:var(--radius);
   color:#1a1008; font-size:17px; font-weight:700; padding:16px 32px; cursor:pointer; }
-
 .or-divider { display:flex; align-items:center; gap:10px; margin:10px 0;
   color:var(--dim); font-size:12px; }
 .or-divider::before,.or-divider::after { content:''; flex:1; height:1px; background:var(--border); }
-
 .manual-row { display:flex; gap:8px; margin-bottom:14px; }
 .manual-row input { flex:1; background:var(--surface2); border:1px solid var(--border);
   border-radius:8px; color:var(--text); font-size:16px; padding:11px 13px; -webkit-appearance:none; }
 .manual-row input:focus { outline:none; border-color:var(--gold); }
 .btn-lookup { background:var(--surface2); border:1px solid var(--gold); border-radius:8px;
   color:var(--gold); font-size:14px; font-weight:700; padding:11px 14px; cursor:pointer; white-space:nowrap; }
-
 .status-bar { display:none; background:var(--surface2); border:1px solid var(--border);
   border-radius:8px; padding:10px 14px; font-size:13px; color:var(--dim);
   margin-bottom:14px; text-align:center; }
 .status-bar.show { display:block; }
 .status-bar.found { border-color:var(--green); color:var(--green); }
 .status-bar.notfound { border-color:var(--red); color:var(--red); }
-
 .form-card { background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); padding:16px; margin-bottom:14px; display:none; }
 .form-card.show { display:block; }
@@ -78,34 +71,29 @@ html,body { min-height:100%; background:var(--bg); color:var(--text);
 .field input:focus,.field select:focus { outline:none; border-color:var(--gold); }
 select option { background:var(--surface2); }
 .genre-auto { font-size:11px; color:var(--green); margin-top:3px; }
-
 .btn-save { width:100%; background:var(--gold); border:none; border-radius:var(--radius);
   color:#1a1008; font-size:17px; font-weight:700; padding:14px; cursor:pointer; margin-top:4px; }
 .btn-save:active { opacity:0.85; }
 .btn-save.saving { opacity:0.6; pointer-events:none; }
 .btn-clear { width:100%; background:none; border:1px solid var(--border); border-radius:var(--radius);
   color:var(--dim); font-size:14px; padding:11px; cursor:pointer; margin-top:8px; }
-
 .debug-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   padding:12px; margin-bottom:12px; font-size:12px; font-family:monospace; color:var(--dim); display:none; }
 .debug-box.show { display:block; }
 .btn-debug { width:100%; background:none; border:1px solid var(--border); border-radius:8px;
   color:var(--dim); font-size:12px; padding:8px; cursor:pointer; margin-bottom:12px; }
-
 .section-title { font-size:11px; color:var(--dim); letter-spacing:1px; text-transform:uppercase; margin:14px 0 10px; }
 .history-card { background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); padding:11px 13px; margin-bottom:8px; }
 .history-artist { font-weight:700; font-size:14px; }
 .history-title  { font-size:13px; color:var(--dim); margin-top:2px; }
 .history-meta   { font-size:11px; color:var(--dim); margin-top:5px; display:flex; gap:10px; flex-wrap:wrap; }
-
 .toast { position:fixed; bottom:20px; left:14px; right:14px; background:var(--surface);
   border:1px solid var(--green); border-radius:var(--radius); padding:12px 16px;
   font-size:14px; color:var(--green); text-align:center; opacity:0; transform:translateY(8px);
   transition:opacity 0.2s,transform 0.2s; z-index:100; pointer-events:none; }
 .toast.show { opacity:1; transform:translateY(0); }
 .toast.error { border-color:var(--red); color:var(--red); }
-
 .spin { display:inline-block; width:13px; height:13px; border:2px solid var(--border);
   border-top-color:var(--gold); border-radius:50%; animation:spin 0.5s linear infinite;
   vertical-align:middle; margin-right:5px; }
@@ -123,7 +111,6 @@ select option { background:var(--surface2); }
 </div>
 
 <div class="main">
-
   <div class="viewfinder-wrap">
     <video id="preview" autoplay playsinline muted></video>
     <div class="scan-status" id="scanStatus">Tap Start Camera</div>
@@ -181,57 +168,74 @@ select option { background:var(--surface2); }
 
   <button class="btn-debug" onclick="toggleDebug()">Toggle Debug</button>
   <div class="debug-box" id="debugBox">
-    <div style="color:var(--gold);font-weight:bold;margin-bottom:6px;">Debug</div>
-    <div id="dbgLib">ZXing library: checking…</div>
-    <div id="dbgStatus">Camera: not started</div>
-    <div id="dbgResult">Last result: —</div>
+    <div style="color:var(--gold);font-weight:bold;margin-bottom:8px;">Debug</div>
+    <div id="dbgLib">Library: checking…</div>
+    <div id="dbgCam">Camera: not started</div>
+    <div id="dbgFrames">Frames decoded: 0</div>
+    <div id="dbgErr">Last error: —</div>
+    <div id="dbgResult">Last barcode: —</div>
   </div>
 
   <div id="historySection" style="display:none;">
     <div class="section-title">This session (<span id="historyCount">0</span> CDs)</div>
     <div id="historyList"></div>
   </div>
-
 </div>
 
 <div id="toast" class="toast"></div>
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwlV39-rraFAIklwGv3K0u3FZj28v2dAYMZN2FrRbHg6japGuzrS-xpXCfDE8Q3yxWN/exec';
-const S = { log:[], count:0, scanning:false, genreTimer:null, codeReader:null };
+const S = { log:[], count:0, scanning:false, genreTimer:null, frameCount:0, animFrame:null };
 
-// ── DEBUG ──────────────────────────────────────────────────
 function toggleDebug() {
-  const b = document.getElementById('debugBox');
-  b.classList.toggle('show');
-  // Check ZXing on open
-  const ZXLib = window.ZXingBrowser || window.ZXing;
-  document.getElementById('dbgLib').textContent =
-    'ZXing library: ' + (ZXLib ? '✓ loaded (' + (window.ZXingBrowser ? 'ZXingBrowser' : 'ZXing') + ')' : '✗ NOT LOADED');
+  document.getElementById('debugBox').classList.toggle('show');
+  checkLib();
 }
 
-// ── API ────────────────────────────────────────────────────
+function checkLib() {
+  const lib = getLib();
+  document.getElementById('dbgLib').textContent = lib
+    ? 'Library: ✓ ' + (window.ZXingBrowser ? 'ZXingBrowser' : window.ZXing ? 'ZXing' : 'unknown')
+    : 'Library: ✗ NOT LOADED';
+}
+
+function getLib() {
+  return window.ZXingBrowser || window.ZXing || null;
+}
+
 async function api(action, data) {
   try {
-    const r = await fetch(SCRIPT_URL, { method:'POST', body: JSON.stringify({ action, ...data }) });
+    const r = await fetch(SCRIPT_URL, { method:'POST', body:JSON.stringify({ action, ...data }) });
     return await r.json();
   } catch(e) { return { error: e.toString() }; }
 }
 
+// ── LOAD ZXING DYNAMICALLY ─────────────────────────────────
+function loadZXing() {
+  return new Promise((resolve, reject) => {
+    if (getLib()) { resolve(getLib()); return; }
+    const s = document.createElement('script');
+    // Try Quagga as fallback barcode library - more mobile friendly
+    s.src = 'https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js';
+    s.onload = () => resolve('quagga');
+    s.onerror = () => {
+      // Try ZXing from different CDN
+      const s2 = document.createElement('script');
+      s2.src = 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.4/umd/index.min.js';
+      s2.onload = () => resolve(window.ZXingBrowser || 'zxing-browser');
+      s2.onerror = reject;
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  });
+}
+
 // ── CAMERA ────────────────────────────────────────────────
 async function startCamera() {
-  document.getElementById('scanStatus').textContent = 'Requesting camera…';
-  document.getElementById('dbgStatus').textContent  = 'Camera: requesting…';
-
-  const ZXLib = window.ZXingBrowser || window.ZXing;
-  if (!ZXLib) {
-    document.getElementById('scanStatus').textContent = 'Scanner library failed to load — refresh';
-    document.getElementById('dbgLib').textContent = 'ZXing: NOT LOADED';
-    return;
-  }
+  document.getElementById('scanStatus').textContent = 'Starting…';
 
   try {
-    // Get camera stream
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal:'environment' }, width:{ ideal:1280 }, height:{ ideal:720 } }
     });
@@ -239,35 +243,93 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
     document.getElementById('startOverlay').style.display = 'none';
-    document.getElementById('scanStatus').textContent = 'Scanning — align barcode in frame';
-    document.getElementById('dbgStatus').textContent  = 'Camera: running ' + video.videoWidth + 'x' + video.videoHeight;
-    S.scanning = true;
+    const w = video.videoWidth, h = video.videoHeight;
+    document.getElementById('dbgCam').textContent = `Camera: ${w}x${h}`;
+    document.getElementById('scanStatus').textContent = 'Loading scanner…';
 
-    // Use BrowserMultiFormatReader
-    S.codeReader = new ZXLib.BrowserMultiFormatReader();
-    S.codeReader.decodeFromVideoElement(video, (result, err) => {
-      if (result) {
-        onBarcode(result.getText());
-      }
-      if (err && err.name !== 'NotFoundException') {
-        document.getElementById('dbgResult').textContent = 'Error: ' + err.message;
-      }
-    });
+    // Load Quagga (mobile-optimized barcode lib)
+    const libResult = await loadZXing();
+    document.getElementById('dbgLib').textContent = 'Library: ✓ ' + libResult;
+
+    if (window.Quagga) {
+      startQuagga(video, stream);
+    } else if (window.ZXingBrowser) {
+      startZXingBrowser(video);
+    } else {
+      // Manual canvas loop as last resort
+      startManualLoop(video);
+    }
 
   } catch(e) {
     document.getElementById('scanStatus').textContent = 'Camera error: ' + e.message;
-    document.getElementById('dbgStatus').textContent  = 'Camera error: ' + e.message;
+    document.getElementById('dbgCam').textContent = 'Error: ' + e.message;
   }
+}
+
+// ── QUAGGA (most mobile-friendly) ─────────────────────────
+function startQuagga(video, stream) {
+  document.getElementById('scanStatus').textContent = 'Scanning — align barcode…';
+  S.scanning = true;
+
+  Quagga.init({
+    inputStream: {
+      type: 'LiveStream',
+      target: video,
+      constraints: { facingMode: 'environment' }
+    },
+    decoder: {
+      readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader']
+    },
+    locate: true,
+  }, (err) => {
+    if (err) {
+      document.getElementById('dbgErr').textContent = 'Quagga init error: ' + err;
+      startManualLoop(video);
+      return;
+    }
+    Quagga.start();
+    Quagga.onDetected((data) => {
+      if (!S.scanning) return;
+      const code = data.codeResult.code;
+      document.getElementById('dbgResult').textContent = 'Barcode: ' + code;
+      Quagga.stop();
+      onBarcode(code);
+    });
+  });
+}
+
+// ── ZXING BROWSER ─────────────────────────────────────────
+function startZXingBrowser(video) {
+  document.getElementById('scanStatus').textContent = 'Scanning — align barcode…';
+  S.scanning = true;
+  const reader = new ZXingBrowser.BrowserMultiFormatReader();
+  reader.decodeFromVideoElement(video, (result, err) => {
+    if (result && S.scanning) {
+      document.getElementById('dbgResult').textContent = 'Barcode: ' + result.getText();
+      onBarcode(result.getText());
+    }
+    if (err && err.name !== 'NotFoundException') {
+      document.getElementById('dbgErr').textContent = err.message;
+    }
+  });
+}
+
+// ── MANUAL CANVAS LOOP (fallback) ─────────────────────────
+function startManualLoop(video) {
+  document.getElementById('scanStatus').textContent = 'Scanning (manual mode)…';
+  document.getElementById('dbgLib').textContent = 'Library: manual canvas — no decode lib loaded';
+  // Without a decode library we can't read barcodes
+  // Show manual entry prominently
+  document.getElementById('scanStatus').textContent = 'Use manual entry below — library failed to load';
+  S.scanning = false;
 }
 
 function onBarcode(barcode) {
   if (!S.scanning) return;
   S.scanning = false;
-  if (S.codeReader) { S.codeReader.reset(); }
   document.getElementById('flash').classList.add('show');
   setTimeout(() => document.getElementById('flash').classList.remove('show'), 300);
-  document.getElementById('scanStatus').textContent = 'Found: ' + barcode;
-  document.getElementById('dbgResult').textContent  = 'Last result: ' + barcode;
+  document.getElementById('scanStatus').textContent = 'Read: ' + barcode;
   doLookup(barcode);
 }
 
@@ -278,9 +340,8 @@ async function doLookup(barcode) {
   document.getElementById('barcodeInput').value = barcode;
   setStatus('<span class="spin"></span> Looking up ' + barcode + '…', '');
   showForm(false);
-
   try {
-    const res  = await fetch(
+    const res = await fetch(
       `https://musicbrainz.org/ws/2/release/?query=barcode:${barcode}&fmt=json&limit=1`,
       { headers:{ 'User-Agent':'GrooveGarage/1.0 (groove@groovegarage.local)' }}
     );
@@ -297,9 +358,7 @@ async function doLookup(barcode) {
     } else {
       setStatus('Not found — fill in details below', 'notfound');
     }
-  } catch(e) {
-    setStatus('Lookup failed — fill in manually', 'notfound');
-  }
+  } catch(e) { setStatus('Lookup failed — fill in manually', 'notfound'); }
   showForm(true);
 }
 
@@ -320,15 +379,12 @@ function triggerGenre() {
   }, 700);
 }
 
-// ── SAVE ──────────────────────────────────────────────────
 async function saveCD() {
   const artist = document.getElementById('fArtist').value.trim();
   const title  = document.getElementById('fTitle').value.trim();
   if (!artist || !title) { showToast('Artist and Title required', true); return; }
-
   const btn = document.getElementById('saveBtn');
   btn.classList.add('saving'); btn.textContent = '⏳ Saving…';
-
   const res = await api('addCD', { data:{
     artist, title,
     label:    document.getElementById('fLabel').value.trim(),
@@ -337,9 +393,7 @@ async function saveCD() {
     doubleCD: document.getElementById('fDouble').value,
     notes:    document.getElementById('fNotes').value.trim(),
   }});
-
   btn.classList.remove('saving'); btn.textContent = 'Save to Inventory';
-
   if (res.success) {
     const msg = res.action === 'incremented'
       ? `+1 copy · ${artist} · now ${res.newQty} in stock`
@@ -355,21 +409,13 @@ async function saveCD() {
     document.getElementById('sessionCount').textContent = S.count;
     renderHistory();
     clearForm();
-    // Resume scanning
     S.scanning = true;
-    if (S.codeReader) {
-      const video = document.getElementById('preview');
-      S.codeReader.decodeFromVideoElement(video, (result, err) => {
-        if (result) onBarcode(result.getText());
-      });
-    }
-    document.getElementById('scanStatus').textContent = 'Scanning — align barcode in frame';
+    document.getElementById('scanStatus').textContent = 'Scanning — align barcode…';
   } else {
     showToast('Save failed: ' + (res.error||'unknown'), true);
   }
 }
 
-// ── HELPERS ────────────────────────────────────────────────
 function setStatus(msg, type) {
   const el = document.getElementById('statusBar');
   el.innerHTML = msg;
@@ -392,8 +438,8 @@ function clearForm() {
 function showToast(msg, isError) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'toast show' + (isError?' error':'');
-  setTimeout(()=>t.classList.remove('show'), 2800);
+  t.className = 'toast show'+(isError?' error':'');
+  setTimeout(()=>t.classList.remove('show'),2800);
 }
 function renderHistory() {
   const sec = document.getElementById('historySection');
