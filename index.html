@@ -410,6 +410,7 @@ async function saveCD() {
     document.getElementById('sessionCount').textContent = S.count;
     renderHistory();
     clearForm();
+    // clearForm handles Quagga restart
     clearForm();
   } else {
     showToast('Save failed: ' + (res.error||'unknown'), true);
@@ -434,41 +435,46 @@ function clearForm() {
   setStatus('Ready — align barcode in frame','');
   showForm(false);
   window.scrollTo(0,0);
-  // Always restart Quagga when clearing for next scan
+  // Always do a full Quagga reinit for next scan
   S.scanning = true;
   document.getElementById('scanStatus').textContent = 'Scanning — align barcode…';
   if (window.Quagga) {
     try { Quagga.stop(); } catch(e) {}
-    setTimeout(() => {
-      try {
-        Quagga.start();
-      } catch(e) {
-        // Quagga already running or needs full reinit
-        restartQuagga();
-      }
-    }, 300);
+    setTimeout(restartQuagga, 400);
   }
 }
 
 function restartQuagga() {
   const video = document.getElementById('preview');
   if (!video || !video.srcObject) return;
+  // Quagga needs full reinit each time — start() alone doesn't re-register listeners
   Quagga.init({
-    inputStream: { type:'LiveStream', target:video,
-      constraints:{ facingMode:'environment' } },
-    decoder: { readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader'] },
+    inputStream: {
+      type: 'LiveStream',
+      target: video,
+      constraints: { facingMode: 'environment' }
+    },
+    decoder: {
+      readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader']
+    },
     locate: true,
+    frequency: 10,
   }, (err) => {
-    if (!err) {
-      Quagga.start();
-      Quagga.onDetected((data) => {
-        if (!S.scanning) return;
-        const code = data.codeResult.code;
-        document.getElementById('dbgResult').textContent = 'Barcode: ' + code;
-        Quagga.stop();
-        onBarcode(code);
-      });
+    if (err) {
+      document.getElementById('dbgErr').textContent = 'Restart error: ' + err;
+      return;
     }
+    Quagga.start();
+    Quagga.onDetected((data) => {
+      if (!S.scanning) return;
+      const code = data.codeResult.code;
+      if (!code) return;
+      document.getElementById('dbgResult').textContent = 'Barcode: ' + code;
+      S.scanning = false;
+      Quagga.stop();
+      onBarcode(code);
+    });
+    document.getElementById('dbgErr').textContent = 'Quagga restarted ✓';
   });
 }
 function showToast(msg, isError) {
