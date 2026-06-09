@@ -135,7 +135,15 @@ select option { background:var(--surface2); }
   <div class="form-card" id="formCard">
     <div class="form-title">Confirm &amp; Save</div>
     <div class="field"><label>Artist *</label>
-      <input type="text" id="fArtist" placeholder="Artist" oninput="triggerGenre()"></div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="fArtist" placeholder="Artist" oninput="triggerGenre()" list="artistList" style="flex:1;">
+        <button onclick="voiceInput()" id="voiceBtn"
+          style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+                 color:var(--gold);font-size:18px;padding:0 12px;cursor:pointer;white-space:nowrap;"
+          title="Speak artist and title">🎤</button>
+      </div>
+      <datalist id="artistList"></datalist>
+    </div>
     <div class="field"><label>Title *</label>
       <input type="text" id="fTitle" placeholder="Album title"></div>
     <div class="field"><label>Label</label>
@@ -556,9 +564,79 @@ function renderHistory() {
       </div>
     </div>`).join('');
 }
+// ── VOICE INPUT ───────────────────────────────────────────
+function voiceInput() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice not supported in this browser', true);
+    return;
+  }
+  const btn = document.getElementById('voiceBtn');
+  btn.textContent = '🔴';
+  btn.style.borderColor = 'var(--red)';
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SR();
+  rec.lang = 'en-US';
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+
+  rec.onresult = (e) => {
+    const transcript = e.results[0][0].transcript.trim();
+    // Try to split into artist / title
+    // Common patterns: "Artist Title", "Artist - Title", "Artist comma Title"
+    const separators = [' - ', ' – ', ', '];
+    let artist = '', title = '';
+    let split = false;
+    for (const sep of separators) {
+      if (transcript.includes(sep)) {
+        const parts = transcript.split(sep);
+        artist = parts[0].trim();
+        title  = parts.slice(1).join(sep).trim();
+        split  = true;
+        break;
+      }
+    }
+    if (!split) {
+      // No separator — put everything in artist field, user fills title
+      artist = transcript;
+      title  = '';
+    }
+    document.getElementById('fArtist').value = artist;
+    document.getElementById('fTitle').value  = title;
+    if (artist) autoGenre(artist);
+    showToast('Heard: ' + transcript);
+  };
+
+  rec.onerror = (e) => {
+    showToast('Voice error: ' + e.error, true);
+  };
+
+  rec.onend = () => {
+    btn.textContent = '🎤';
+    btn.style.borderColor = 'var(--border)';
+  };
+
+  rec.start();
+}
+
+// ── ARTIST AUTOCOMPLETE ────────────────────────────────────
+async function loadArtistList() {
+  // Load artist names from genre rules for autocomplete
+  try {
+    const res = await api('search', { query: '', field: 'all', status: 'Active', eventOnly: false });
+    if (Array.isArray(res)) {
+      const artists = [...new Set(res.map(r => r.artist).filter(Boolean))].sort();
+      const list = document.getElementById('artistList');
+      list.innerHTML = artists.map(a => `<option value="${a.replace(/"/g,'&quot;')}">`).join('');
+    }
+  } catch(e) { console.warn('Autocomplete load failed:', e); }
+}
+
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+// Load artist autocomplete in background
+loadArtistList();
 </script>
 </body>
 </html>
