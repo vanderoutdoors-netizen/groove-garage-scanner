@@ -197,8 +197,11 @@ input:focus,select:focus{outline:none;border-color:var(--bm);box-shadow:0 0 0 3p
 
 <script>
 const APP_URL = 'https://script.google.com/macros/s/AKfycbwlV39-rraFAIklwGv3K0u3FZj28v2dAYMZN2FrRbHg6japGuzrS-xpXCfDE8Q3yxWN/exec';
-const MB_URL  = 'https://musicbrainz.org/ws/2/release/?query=barcode:';
-const MB_HDR  = {'User-Agent':'GrooveGarage/1.0 (groove@groovegarage.local)'};
+const MB_URL      = 'https://musicbrainz.org/ws/2/release/?query=barcode:';
+const MB_CAT_URL  = 'https://musicbrainz.org/ws/2/release/?query=catno:';
+const MB_HDR      = {'User-Agent':'GrooveGarage/1.0 (groove@groovegarage.local)'};
+const DG_TOKEN    = 'pqiZgZCbzTqyewjJvpcgEUhaDpqHOfEbPxWyJjVm';
+const DG_CAT_URL  = 'https://api.discogs.com/database/search?type=release&catno=';
 
 const S = { sessionCount: 0, history: [], currentBarcode: '' };
 
@@ -310,30 +313,96 @@ async function manualLookup(){
   await lookupAndShow(code);
 }
 
-// No-barcode path — skip MusicBrainz, go straight to confirm with catalog # pre-filled
-function manualCatalogEntry(){
+// No-barcode path — look up by catalog number via MusicBrainz then Discogs
+async function manualCatalogEntry(){
   const catalog = document.getElementById('manualCatalog').value.trim();
+  if(!catalog) return;
   document.getElementById('manualCatalog').value = '';
-  S.currentBarcode = catalog || 'NO-BARCODE';
+  S.currentBarcode = catalog;
+  setStatus('Looking up catalog #: ' + catalog);
+  await lookupByCatalog(catalog);
+}
 
-  // Clear confirm form
+async function lookupByCatalog(catalog){
+  // Show confirm screen with loading state
+  showScreen('confirm');
+  document.getElementById('barcodeTag').textContent = 'Catalog #: ' + catalog;
+  document.getElementById('confirmAlert').classList.remove('show');
+  document.getElementById('genreAutoMsg').textContent = '';
   ['cfArtist','cfTitle','cfLabel','cfYear','cfDiscogs','cfNotes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('cfDouble').value  = 'No';
   document.getElementById('cfGenre').value   = '';
-  document.getElementById('genreAutoMsg').textContent = '';
-  document.getElementById('confirmAlert').classList.remove('show');
-
-  // Pre-fill catalog and mark as not found (no MusicBrainz lookup)
   document.getElementById('cfCatalog').value = catalog;
-  document.getElementById('barcodeTag').textContent = catalog ? 'Catalog #: ' + catalog : 'No barcode';
 
   const badge = document.getElementById('lookupBadge');
-  badge.className   = 'lookup-badge not-found';
-  badge.textContent = '⚠ No barcode — fill in details manually';
+  badge.className   = 'lookup-badge loading';
+  badge.textContent = '⏳ Searching MusicBrainz…';
 
-  showScreen('confirm');
-  // Focus artist field so keyboard opens ready to type
+  // 1. Try MusicBrainz catno search
+  try{
+    const res  = await fetch(MB_CAT_URL + encodeURIComponent(catalog) + '&fmt=json&limit=1', {headers: MB_HDR});
+    const data = await res.json();
+    if(data.releases && data.releases.length > 0){
+      const rel = data.releases[0];
+      fillConfirmFromMB(rel, catalog);
+      badge.className   = 'lookup-badge found';
+      badge.textContent = '✓ Found on MusicBrainz';
+      const artist = document.getElementById('cfArtist').value;
+      if(artist) await autoGenre(artist);
+      return;
+    }
+  } catch(e){ console.warn('MB catno error', e); }
+
+  // 2. Fall back to Discogs
+  badge.textContent = '⏳ Trying Discogs…';
+  try{
+    const res  = await fetch(DG_CAT_URL + encodeURIComponent(catalog) + '&token=' + DG_TOKEN);
+    const data = await res.json();
+    if(data.results && data.results.length > 0){
+      const r = data.results[0];
+      // Discogs returns "Artist - Title" in the title field
+      const parts  = (r.title || '').split(' - ');
+      const artist = parts[0] || '';
+      const title  = parts.slice(1).join(' - ') || r.title || '';
+      const year   = r.year ? String(r.year) : '';
+      const label  = r.label?.[0] || '';
+      const catno  = r.catno || catalog;
+      const isDouble = (r.format_quantity || 1) > 1 ? 'Yes' : 'No';
+
+      document.getElementById('cfArtist').value  = artist;
+      document.getElementById('cfTitle').value   = title;
+      document.getElementById('cfLabel').value   = label;
+      document.getElementById('cfYear').value    = year;
+      document.getElementById('cfCatalog').value = catno;
+      document.getElementById('cfDiscogs').value = r.id ? String(r.id) : '';
+      document.getElementById('cfDouble').value  = isDouble;
+
+      badge.className   = 'lookup-badge found';
+      badge.textContent = '✓ Found on Discogs';
+      if(artist) await autoGenre(artist);
+      return;
+    }
+  } catch(e){ console.warn('Discogs catno error', e); }
+
+  // 3. Nothing found — manual entry
+  badge.className   = 'lookup-badge not-found';
+  badge.textContent = '⚠ Not found — fill in manually';
   setTimeout(() => document.getElementById('cfArtist').focus(), 300);
+}
+
+function fillConfirmFromMB(rel, catalog){
+  const artist  = rel['artist-credit']?.[0]?.artist?.name || '';
+  const title   = rel.title || '';
+  const label   = rel['label-info']?.[0]?.label?.name || '';
+  const year    = rel.date ? rel.date.substring(0,4) : '';
+  const catno   = rel['label-info']?.[0]?.['catalog-number'] || catalog;
+  const isDouble= (rel.media?.length || 1) > 1 ? 'Yes' : 'No';
+  document.getElementById('cfArtist').value  = artist;
+  document.getElementById('cfTitle').value   = title;
+  document.getElementById('cfLabel').value   = label;
+  document.getElementById('cfYear').value    = year;
+  document.getElementById('cfCatalog').value = catno;
+  document.getElementById('cfDouble').value  = isDouble;
 }
 
 // ── MUSICBRAINZ LOOKUP ────────────────────────────────────────
@@ -380,8 +449,40 @@ async function lookupAndShow(barcode){
       document.getElementById('cfCatalog').value = barcode;
     }
   } catch(e){
+    // MusicBrainz failed entirely — try Discogs barcode
+    await lookupBarcodeDiscogs(barcode, badge);
+  }
+}
+
+async function lookupBarcodeDiscogs(barcode, badge){
+  badge.textContent = '⏳ Trying Discogs…';
+  try{
+    const res  = await fetch('https://api.discogs.com/database/search?type=release&barcode=' + encodeURIComponent(barcode) + '&token=' + DG_TOKEN);
+    const data = await res.json();
+    if(data.results && data.results.length > 0){
+      const r      = data.results[0];
+      const parts  = (r.title || '').split(' - ');
+      const artist = parts[0] || '';
+      const title  = parts.slice(1).join(' - ') || r.title || '';
+      document.getElementById('cfArtist').value  = artist;
+      document.getElementById('cfTitle').value   = title;
+      document.getElementById('cfLabel').value   = r.label?.[0] || '';
+      document.getElementById('cfYear').value    = r.year ? String(r.year) : '';
+      document.getElementById('cfCatalog').value = r.catno || '';
+      document.getElementById('cfDiscogs').value = r.id ? String(r.id) : '';
+      document.getElementById('cfDouble').value  = (r.format_quantity||1) > 1 ? 'Yes' : 'No';
+      badge.className   = 'lookup-badge found';
+      badge.textContent = '✓ Found on Discogs';
+      const artist2 = document.getElementById('cfArtist').value;
+      if(artist2) await autoGenre(artist2);
+    } else {
+      badge.className   = 'lookup-badge not-found';
+      badge.textContent = '⚠ Not found on MusicBrainz or Discogs — fill in manually';
+      document.getElementById('cfCatalog').value = barcode;
+    }
+  } catch(e){
     badge.className   = 'lookup-badge not-found';
-    badge.textContent = '⚠ MusicBrainz unavailable — fill in manually';
+    badge.textContent = '⚠ Lookup failed — fill in manually';
   }
 }
 
