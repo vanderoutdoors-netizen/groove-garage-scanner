@@ -112,12 +112,25 @@ input:focus,select:focus{outline:none;border-color:var(--bm);box-shadow:0 0 0 3p
   </div>
 
   <div class="card">
-    <div class="card-title">⌨️ Manual Entry</div>
-    <div style="font-size:.78rem;color:var(--t2);margin-bottom:8px;">Enter barcode number if camera scan is not working.</div>
-    <div class="inline-row">
+    <div class="card-title">⌨️ No Barcode / Manual Entry</div>
+    <div style="font-size:.78rem;color:var(--t2);margin-bottom:10px;">
+      Enter a barcode number to look up on MusicBrainz, or enter a catalog number for CDs without barcodes.
+    </div>
+
+    <label>Barcode lookup</label>
+    <div class="inline-row" style="margin-bottom:10px;">
       <input type="text" id="manualBarcode" placeholder="Barcode number…" inputmode="numeric"
              onkeydown="if(event.key==='Enter'){manualLookup();event.preventDefault();}"/>
       <button class="btn btn-primary btn-sm" onclick="manualLookup()">Look up</button>
+    </div>
+
+    <div class="section-div"><span>Or</span></div>
+
+    <label>Catalog # (no barcode)</label>
+    <div class="inline-row">
+      <input type="text" id="manualCatalog" placeholder="e.g. CK-12345, DPRO-12345…" autocomplete="off"
+             onkeydown="if(event.key==='Enter'){manualCatalogEntry();event.preventDefault();}"/>
+      <button class="btn btn-ghost btn-sm" onclick="manualCatalogEntry()">Add CD</button>
     </div>
   </div>
 
@@ -295,6 +308,32 @@ async function manualLookup(){
   S.currentBarcode = code;
   setStatus('Looking up: ' + code);
   await lookupAndShow(code);
+}
+
+// No-barcode path — skip MusicBrainz, go straight to confirm with catalog # pre-filled
+function manualCatalogEntry(){
+  const catalog = document.getElementById('manualCatalog').value.trim();
+  document.getElementById('manualCatalog').value = '';
+  S.currentBarcode = catalog || 'NO-BARCODE';
+
+  // Clear confirm form
+  ['cfArtist','cfTitle','cfLabel','cfYear','cfDiscogs','cfNotes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('cfDouble').value  = 'No';
+  document.getElementById('cfGenre').value   = '';
+  document.getElementById('genreAutoMsg').textContent = '';
+  document.getElementById('confirmAlert').classList.remove('show');
+
+  // Pre-fill catalog and mark as not found (no MusicBrainz lookup)
+  document.getElementById('cfCatalog').value = catalog;
+  document.getElementById('barcodeTag').textContent = catalog ? 'Catalog #: ' + catalog : 'No barcode';
+
+  const badge = document.getElementById('lookupBadge');
+  badge.className   = 'lookup-badge not-found';
+  badge.textContent = '⚠ No barcode — fill in details manually';
+
+  showScreen('confirm');
+  // Focus artist field so keyboard opens ready to type
+  setTimeout(() => document.getElementById('cfArtist').focus(), 300);
 }
 
 // ── MUSICBRAINZ LOOKUP ────────────────────────────────────────
